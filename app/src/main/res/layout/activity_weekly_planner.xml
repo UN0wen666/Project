@@ -37,7 +37,53 @@
             android:layout_height="40dp" />
     </LinearLayout>
 
-    <!-- Calendar Date Strip -->
+    <!-- Week Navigation: เลื่อนดูสัปดาห์ก่อน/ถัดไป -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/btnPrevWeek"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="สัปดาห์ก่อน"
+            android:gravity="center"
+            android:text="‹"
+            android:textColor="@color/orange_primary"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvWeekRange"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:text="13 – 19 ต.ค. 2569"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnNextWeek"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="สัปดาห์ถัดไป"
+            android:gravity="center"
+            android:text="›"
+            android:textColor="@color/orange_primary"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Calendar Date Strip (ตัวเลขวันที่ถูกเซ็ตจากโค้ดตามสัปดาห์ที่เลือก) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

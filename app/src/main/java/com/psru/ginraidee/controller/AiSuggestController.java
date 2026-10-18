@@ -2,6 +2,7 @@ package com.psru.ginraidee.controller;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import com.psru.ginraidee.BuildConfig;
 import com.psru.ginraidee.model.AiSuggestion;
@@ -13,6 +14,9 @@ import com.psru.ginraidee.util.GeminiApiClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -36,11 +40,16 @@ public class AiSuggestController {
 
     /** ช่องทางส่งผลลัพธ์กลับไปให้หน้าจอ */
     public interface Callback {
-        void onSuccess(List<AiSuggestion> suggestions);
+        /**
+         * @param offlineNotice null ถ้าคำตอบมาจาก Gemini จริง
+         *                      ถ้าไม่ null แปลว่าใช้โหมดออฟไลน์ และข้อความนี้บอกเหตุผล
+         */
+        void onSuccess(List<AiSuggestion> suggestions, String offlineNotice);
 
         void onError(String message);
     }
 
+    private static final String TAG = "AiSuggestController";
     private static final int MAX_SUGGESTIONS = 3;
 
     private final FoodManager foodManager;
@@ -75,7 +84,8 @@ public class AiSuggestController {
             if (offline.isEmpty()) {
                 callback.onError("ไม่พบเมนูที่เข้ากับคำค้นหา ลองระบุคำค้นหาใหม่อีกครั้งนะ");
             } else {
-                callback.onSuccess(offline);
+                callback.onSuccess(offline,
+                        "⚠️ ยังไม่ได้ใส่ GEMINI_API_KEY ใน local.properties จึงใช้โหมดออฟไลน์ (ดู docs/AI_SETUP_GUIDE.txt)");
             }
             return;
         }
@@ -91,15 +101,19 @@ public class AiSuggestController {
                 if (suggestions.isEmpty()) {
                     postError(callback, "AI ยังไม่มีเมนูแนะนำ ลองอธิบายเพิ่มอีกนิดนะ");
                 } else {
-                    mainHandler.post(() -> callback.onSuccess(suggestions));
+                    mainHandler.post(() -> callback.onSuccess(suggestions, null));
                 }
             } catch (Exception e) {
-                // ต่อเน็ตไม่ได้ก็ยังพอช่วยผู้ใช้ได้ด้วยการค้นในคลัง offline
+                // ต่อ AI ไม่ได้ก็ยังพอช่วยผู้ใช้ได้ด้วยการค้นในคลัง offline
+                // แต่ต้องบอกผู้ใช้ด้วยว่าทำไม ไม่งั้นจะดูเหมือน AI ใช้ไม่ได้โดยไม่รู้สาเหตุ
+                Log.e(TAG, "เรียก Gemini ไม่สำเร็จ", e);
+                String reason = describeError(e);
                 List<AiSuggestion> offline = suggestOffline(question);
                 if (offline.isEmpty()) {
-                    postError(callback, "เชื่อมต่อ AI ไม่สำเร็จ: " + e.getMessage());
+                    postError(callback, "เชื่อมต่อ AI ไม่สำเร็จ: " + reason);
                 } else {
-                    mainHandler.post(() -> callback.onSuccess(offline));
+                    mainHandler.post(() -> callback.onSuccess(offline,
+                            "⚠️ เชื่อมต่อ AI ไม่สำเร็จ (" + reason + ") จึงใช้โหมดออฟไลน์แทน"));
                 }
             }
         });
@@ -253,6 +267,32 @@ public class AiSuggestController {
             }
         }
         return false;
+    }
+
+    /** แปลง exception เป็นข้อความที่ผู้ใช้อ่านแล้วรู้ว่าต้องแก้ตรงไหน */
+    private String describeError(Exception e) {
+        if (e instanceof UnknownHostException) {
+            return "ไม่มีอินเทอร์เน็ต หรือ emulator ต่อเน็ตไม่ได้";
+        }
+        if (e instanceof SocketTimeoutException) {
+            return "เน็ตช้าเกินไป หมดเวลารอ";
+        }
+        String msg = e.getMessage() == null ? "" : e.getMessage();
+        if (e instanceof IOException) {
+            if (msg.contains("API_KEY_INVALID") || msg.contains("API key not valid")) {
+                return "API key ไม่ถูกต้อง ลองสร้างคีย์ใหม่";
+            }
+            if (msg.contains("HTTP 404")) {
+                return "ไม่พบโมเดล \"" + BuildConfig.GEMINI_MODEL + "\" ลองเปลี่ยน GEMINI_MODEL";
+            }
+            if (msg.contains("HTTP 429")) {
+                return "ใช้โควตาฟรีเกินแล้ว รอสักพักแล้วลองใหม่";
+            }
+            if (msg.contains("HTTP 403")) {
+                return "คีย์นี้ไม่มีสิทธิ์ใช้ Gemini API";
+            }
+        }
+        return msg.isEmpty() ? e.getClass().getSimpleName() : msg;
     }
 
     private void postError(Callback callback, String message) {

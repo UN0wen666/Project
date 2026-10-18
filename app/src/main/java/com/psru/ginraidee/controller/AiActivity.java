@@ -84,9 +84,13 @@ public class AiActivity extends AppCompatActivity {
 
         controller.suggest(etPrompt.getText().toString(), new AiSuggestController.Callback() {
             @Override
-            public void onSuccess(List<AiSuggestion> suggestions) {
+            public void onSuccess(List<AiSuggestion> suggestions, String offlineNotice) {
                 setLoading(false);
-                tvStatus.setText(getString(R.string.ai_result_count, suggestions.size()));
+                String status = getString(R.string.ai_result_count, suggestions.size());
+                if (offlineNotice != null) {
+                    status = offlineNotice + "\n" + status;
+                }
+                tvStatus.setText(status);
                 adapter.submit(suggestions);
             }
 

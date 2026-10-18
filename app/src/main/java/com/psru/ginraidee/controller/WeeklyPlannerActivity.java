@@ -15,6 +15,11 @@ import com.psru.ginraidee.R;
 import com.psru.ginraidee.model.Food;
 import com.psru.ginraidee.util.BottomNavHelper;
 
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
 public class WeeklyPlannerActivity extends AppCompatActivity {
 
     private TextView tvDayTitle;
@@ -22,23 +27,30 @@ public class WeeklyPlannerActivity extends AppCompatActivity {
     private TextView tvLunchName;
     private TextView tvDinnerName;
 
+    private TextView tvWeekRange;
+
     private int currentDayIndex = 0;
     private int editingMealSlot = 0; // 0: เช้า, 1: กลางวัน, 2: เย็น
 
-    private final String[] dayNames = {
-            "วันจันทร์ (13 ต.ค.)",
-            "วันอังคาร (14 ต.ค.)",
-            "วันพุธ (15 ต.ค.)",
-            "วันพฤหัสบดี (16 ต.ค.)",
-            "วันศุกร์ (17 ต.ค.)",
-            "วันเสาร์ (18 ต.ค.)",
-            "วันอาทิตย์ (19 ต.ค.)"
+    // เรียงจันทร์ → อาทิตย์ ให้ตรงกับแถบวันใน layout
+    private static final String[] DAY_NAMES = {
+            "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี",
+            "วันศุกร์", "วันเสาร์", "วันอาทิตย์"
+    };
+
+    private static final String[] THAI_MONTHS = {
+            "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+            "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
     };
 
     private int[] dayBadgeIds;
 
-    // เก็บข้อมูลเมนู 7 วัน วันละ 3 มื้อ [7][3] (เริ่มต้นเป็นว่างทั้งหมด)
-    private final Food[][] weeklyPlan = new Food[7][3];
+    // วันจันทร์ของสัปดาห์ที่กำลังแสดงอยู่ (คำนวณจากวันที่จริงของเครื่อง)
+    private Calendar weekStart;
+
+    // เก็บเมนูวันละ 3 มื้อ โดยใช้วันที่ (yyyy-MM-dd) เป็น key
+    // ทำให้เลื่อนไปสัปดาห์ไหนก็ได้ ไม่ถูกจำกัดแค่ 7 วัน
+    private final Map<String, Food[]> weeklyPlan = new HashMap<>();
 
     private final ActivityResultLauncher<Intent> catalogLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
@@ -46,7 +58,7 @@ public class WeeklyPlannerActivity extends AppCompatActivity {
                 if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                     Food selectedFood = (Food) result.getData().getSerializableExtra(MenuCatalogActivity.EXTRA_SELECTED_FOOD);
                     if (selectedFood != null) {
-                        weeklyPlan[currentDayIndex][editingMealSlot] = selectedFood;
+                        getMealsForSelectedDay()[editingMealSlot] = selectedFood;
                         updateMealDisplay();
                         String mealName = editingMealSlot == 0 ? "มื้อเช้า" : (editingMealSlot == 1 ? "มื้อกลางวัน" : "มื้อเย็น");
                         Toast.makeText(this, "อัปเดต " + mealName + " เรียบร้อย ❤️", Toast.LENGTH_SHORT).show();
@@ -66,6 +78,7 @@ public class WeeklyPlannerActivity extends AppCompatActivity {
         tvBreakfastName = findViewById(R.id.tvBreakfastName);
         tvLunchName = findViewById(R.id.tvLunchName);
         tvDinnerName = findViewById(R.id.tvDinnerName);
+        tvWeekRange = findViewById(R.id.tvWeekRange);
 
         dayBadgeIds = new int[]{
                 R.id.badgeMon, R.id.badgeTue, R.id.badgeWed,
@@ -87,13 +100,92 @@ public class WeeklyPlannerActivity extends AppCompatActivity {
         findViewById(R.id.mealLunch).setOnClickListener(v -> openCatalogForSlot(1));
         findViewById(R.id.mealDinner).setOnClickListener(v -> openCatalogForSlot(2));
 
-        selectDay(0);
+        findViewById(R.id.btnPrevWeek).setOnClickListener(v -> changeWeek(-1));
+        findViewById(R.id.btnNextWeek).setOnClickListener(v -> changeWeek(1));
+        tvWeekRange.setOnClickListener(v -> goToToday()); // แตะช่วงวันที่เพื่อกลับมาสัปดาห์นี้
+
+        goToToday();
         BottomNavHelper.setup(this, R.id.navWeekly);
+    }
+
+    /** เปิดสัปดาห์ปัจจุบัน และเลือกวันนี้ไว้ให้เลย */
+    private void goToToday() {
+        Calendar today = Calendar.getInstance();
+        weekStart = getMondayOf(today);
+        renderWeek();
+        selectDay(getDayIndex(today));
+    }
+
+    /** เลื่อนสัปดาห์ไปข้างหน้า (+1) หรือย้อนหลัง (-1) */
+    private void changeWeek(int offset) {
+        weekStart.add(Calendar.WEEK_OF_YEAR, offset);
+        renderWeek();
+        selectDay(currentDayIndex);
+    }
+
+    /** หาวันจันทร์ของสัปดาห์ที่วันนั้นอยู่ */
+    private static Calendar getMondayOf(Calendar date) {
+        Calendar monday = (Calendar) date.clone();
+        monday.set(Calendar.HOUR_OF_DAY, 0);
+        monday.set(Calendar.MINUTE, 0);
+        monday.set(Calendar.SECOND, 0);
+        monday.set(Calendar.MILLISECOND, 0);
+        monday.add(Calendar.DAY_OF_MONTH, -getDayIndex(date));
+        return monday;
+    }
+
+    /** แปลงวันในสัปดาห์เป็น index 0 = จันทร์ ... 6 = อาทิตย์ */
+    private static int getDayIndex(Calendar date) {
+        return (date.get(Calendar.DAY_OF_WEEK) + 5) % 7;
+    }
+
+    private Calendar getDate(int dayIndex) {
+        Calendar date = (Calendar) weekStart.clone();
+        date.add(Calendar.DAY_OF_MONTH, dayIndex);
+        return date;
+    }
+
+    private static String formatDate(Calendar date) {
+        return date.get(Calendar.DAY_OF_MONTH) + " " + THAI_MONTHS[date.get(Calendar.MONTH)];
+    }
+
+    private static boolean isSameDay(Calendar a, Calendar b) {
+        return a.get(Calendar.YEAR) == b.get(Calendar.YEAR)
+                && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR);
+    }
+
+    /** เขียนตัวเลขวันที่ลงแถบปฏิทิน และช่วงวันที่ของสัปดาห์ (ปี พ.ศ.) */
+    private void renderWeek() {
+        for (int i = 0; i < dayBadgeIds.length; i++) {
+            TextView badge = findViewById(dayBadgeIds[i]);
+            badge.setText(String.valueOf(getDate(i).get(Calendar.DAY_OF_MONTH)));
+        }
+        Calendar sunday = getDate(6);
+        int buddhistYear = sunday.get(Calendar.YEAR) + 543;
+        tvWeekRange.setText(formatDate(weekStart) + " – " + formatDate(sunday) + " " + buddhistYear);
+    }
+
+    /** เมนู 3 มื้อของวันที่เลือกอยู่ ถ้ายังไม่มีก็สร้างช่องว่างไว้ให้ */
+    private Food[] getMealsForSelectedDay() {
+        Calendar date = getDate(currentDayIndex);
+        String key = String.format(Locale.US, "%04d-%02d-%02d",
+                date.get(Calendar.YEAR), date.get(Calendar.MONTH) + 1, date.get(Calendar.DAY_OF_MONTH));
+        Food[] meals = weeklyPlan.get(key);
+        if (meals == null) {
+            meals = new Food[3];
+            weeklyPlan.put(key, meals);
+        }
+        return meals;
     }
 
     private void selectDay(int dayIndex) {
         currentDayIndex = dayIndex;
-        tvDayTitle.setText(dayNames[dayIndex]);
+        Calendar selected = getDate(dayIndex);
+        String title = DAY_NAMES[dayIndex] + " (" + formatDate(selected) + ")";
+        if (isSameDay(selected, Calendar.getInstance())) {
+            title += " • วันนี้";
+        }
+        tvDayTitle.setText(title);
 
         for (int i = 0; i < dayBadgeIds.length; i++) {
             TextView badge = findViewById(dayBadgeIds[i]);
@@ -113,9 +205,10 @@ public class WeeklyPlannerActivity extends AppCompatActivity {
     }
 
     private void updateMealDisplay() {
-        Food b = weeklyPlan[currentDayIndex][0];
-        Food l = weeklyPlan[currentDayIndex][1];
-        Food d = weeklyPlan[currentDayIndex][2];
+        Food[] meals = getMealsForSelectedDay();
+        Food b = meals[0];
+        Food l = meals[1];
+        Food d = meals[2];
 
         if (b != null) {
             tvBreakfastName.setText(b.getEmoji() + "  " + b.getFoodName());
