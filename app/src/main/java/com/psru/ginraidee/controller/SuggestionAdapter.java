@@ -88,6 +88,10 @@ public class SuggestionAdapter extends RecyclerView.Adapter<SuggestionAdapter.Su
                         .append(matched.getCalories())
                         .append(" แคลอรี่ • ")
                         .append(matched.getTag());
+            } else if (suggestion.getCalories() > 0) {
+                detail.append("\n~")
+                        .append(suggestion.getCalories())
+                        .append(" แคลอรี่ • เมนูแนะนำจาก AI");
             }
             detailTextView.setText(detail.toString());
 
@@ -97,18 +101,22 @@ public class SuggestionAdapter extends RecyclerView.Adapter<SuggestionAdapter.Su
                     foodToPass = FoodManager.getInstance().findByName(suggestion.getFoodName());
                 }
                 if (foodToPass == null && suggestion.getFoodName() != null) {
+                    // เมนูใหม่จาก AI ที่ไม่มีในคลัง ใช้แคลอรี่/วัตถุดิบ/วิธีทำที่ AI ส่งมา
+                    int calories = suggestion.getCalories() > 0 ? suggestion.getCalories() : 350;
+                    String ingredients = suggestion.getIngredients().isEmpty()
+                            ? "วัตถุดิบแนะนำจาก AI ออนไลน์" : suggestion.getIngredients();
+                    String steps = suggestion.getSteps().isEmpty()
+                            ? "1. เตรียมวัตถุดิบตามความเหมาะสมของเมนู\n2. ปรุงรสตามความชอบ\n3. จัดเสิร์ฟความอร่อยร้อน ๆ"
+                            : suggestion.getSteps();
                     foodToPass = new HealthyFood(
                             suggestion.getFoodName(),
                             70.0,
-                            350,
+                            calories,
                             "",
                             suggestion.getReason(),
                             80,
                             false
-                    ).withDetails(
-                            "วัตถุดิบแนะนำจาก AI ออนไลน์",
-                            "1. เตรียมวัตถุดิบตามความเหมาะสมของเมนู\n2. ปรุงรสตามสูตร AI และความชอบ\n3. จัดเสิร์ฟความอร่อยร้อน ๆ"
-                    );
+                    ).withDetails(ingredients, steps);
                 }
                 if (foodToPass != null) {
                     if (listener != null) {

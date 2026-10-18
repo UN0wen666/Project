@@ -129,24 +129,20 @@ public class AiSuggestController {
     // ------------------------------------------------------------------
 
     /**
-     * ประกอบ prompt โดยแนบรายชื่อเมนูในเครื่องไปด้วย
-     * เพื่อให้ AI เลือกจากเมนูที่เรามีจริงก่อน ผลลัพธ์จะได้จับคู่กับข้อมูลจริงได้
+     * ประกอบ prompt ให้ AI แนะนำเมนูอะไรก็ได้ตามที่ผู้ใช้อยากกิน
+     * ไม่แนบรายชื่อเมนูในเครื่องไปแล้ว เพราะ AI จะวนเลือกแต่เมนูเดิม ๆ ในคลัง
+     * ถ้าชื่อที่ได้กลับมาตรงกับคลัง offline ก็ยังจับคู่ได้เองใน parseSuggestions()
      */
     private String buildPrompt(String userInput) {
-        StringBuilder menuNames = new StringBuilder();
-        for (Food food : foodManager.getFoodList()) {
-            if (menuNames.length() > 0) {
-                menuNames.append(", ");
-            }
-            menuNames.append(food.getFoodName());
-        }
-
         return "คุณเป็นผู้ช่วยเลือกเมนูอาหารของแอป \"Gin Rai Dee?\" ตอบเป็นภาษาไทยเสมอ\n\n"
-                + "รายการเมนูที่แอปมีอยู่: " + menuNames + "\n\n"
                 + "สิ่งที่ผู้ใช้อยากกิน: \"" + userInput + "\"\n\n"
-                + "ให้แนะนำเมนู " + MAX_SUGGESTIONS + " อย่าง เรียงจากที่เหมาะที่สุด\n"
-                + "- พยายามเลือกจากรายการเมนูข้างบนก่อน ถ้าไม่มีอันไหนเข้ากันจริง ๆ ค่อยเสนอเมนูอื่น\n"
-                + "- reason ให้เขียนสั้น ๆ ไม่เกิน 2 บรรทัด บอกว่าทำไมเมนูนี้ถึงเหมาะกับที่ผู้ใช้บอก";
+                + "ให้แนะนำเมนู " + MAX_SUGGESTIONS + " อย่างที่ไม่ซ้ำแนวกัน เรียงจากที่เหมาะที่สุด\n"
+                + "- เลือกได้ทุกเมนูที่หากินได้จริงในไทย ทั้งอาหารไทย ญี่ปุ่น เกาหลี ตะวันตก ของหวาน ฯลฯ\n"
+                + "- foodName ใช้ชื่อเมนูที่คนไทยเรียกกันทั่วไป ไม่ต้องมีคำอธิบายต่อท้าย\n"
+                + "- reason เขียนสั้น ๆ ไม่เกิน 2 บรรทัด บอกว่าทำไมเมนูนี้ถึงเหมาะกับที่ผู้ใช้บอก\n"
+                + "- calories คือแคลอรี่โดยประมาณต่อ 1 จาน (ตัวเลขอย่างเดียว)\n"
+                + "- ingredients คือวัตถุดิบหลัก คั่นด้วยเครื่องหมายจุลภาค\n"
+                + "- steps คือวิธีทำแบบย่อ 3-5 ขั้นตอน ขึ้นบรรทัดใหม่ทุกขั้นและนำหน้าด้วยเลขข้อ";
     }
 
     /** แปลง JSON array ที่ Gemini ตอบกลับมาเป็น list ของ object */
@@ -164,8 +160,11 @@ public class AiSuggestController {
             if (name.isEmpty()) {
                 continue;
             }
-            // จับคู่กับคลัง offline เพื่อเอาราคา/แคลอรี่จริงมาแสดง
-            suggestions.add(new AiSuggestion(name, reason, foodManager.findByName(name)));
+            // จับคู่กับคลัง offline เพื่อเอาราคา/แคลอรี่จริงมาแสดง ถ้าไม่เจอก็ใช้ค่าที่ AI ประมาณมา
+            suggestions.add(new AiSuggestion(name, reason, foodManager.findByName(name),
+                    item.optInt("calories", 0),
+                    item.optString("ingredients", "").trim(),
+                    item.optString("steps", "").trim()));
         }
         return suggestions;
     }

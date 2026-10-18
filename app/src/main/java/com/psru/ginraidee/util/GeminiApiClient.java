@@ -35,7 +35,7 @@ public final class GeminiApiClient {
 
     /**
      * ส่ง prompt ไปให้ Gemini แล้วบังคับให้ตอบกลับเป็น JSON array
-     * ตาม schema: [{ "foodName": "...", "reason": "..." }]
+     * ตาม schema: [{ "foodName", "reason", "calories", "ingredients", "steps" }]
      *
      * @return ข้อความ JSON ที่โมเดลตอบกลับมา
      * @throws IOException ถ้าเน็ตมีปัญหา หรือ API ตอบ error
@@ -86,12 +86,16 @@ public final class GeminiApiClient {
 
             JSONObject itemProperties = new JSONObject()
                     .put("foodName", new JSONObject().put("type", "STRING"))
-                    .put("reason", new JSONObject().put("type", "STRING"));
+                    .put("reason", new JSONObject().put("type", "STRING"))
+                    .put("calories", new JSONObject().put("type", "INTEGER"))
+                    .put("ingredients", new JSONObject().put("type", "STRING"))
+                    .put("steps", new JSONObject().put("type", "STRING"));
 
             JSONObject items = new JSONObject()
                     .put("type", "OBJECT")
                     .put("properties", itemProperties)
-                    .put("required", new JSONArray().put("foodName").put("reason"));
+                    .put("required", new JSONArray().put("foodName").put("reason")
+                            .put("calories").put("ingredients").put("steps"));
 
             JSONObject schema = new JSONObject()
                     .put("type", "ARRAY")
